@@ -1,22 +1,27 @@
 /*
 	Soly
 
-	isPlayerAndroid(playerId)
-	setDeviceInfo(playerId, deviceType)
-	isInvalidObject(modelId)
+	isPlayerAndroid(playerId);
+	setDeviceInfo(playerId, deviceType);
+	isInvalidObject(modelId);
+	
+	g_szValidDialogStyles[];
+	
+	IO_USE_DIALOG_PATCH
+	IO_USE_DIALOG_RESPONSE_PATCH
 
 */
 
-#if defined _invalidobjects_included
+#if defined _IO_included
 	#endinput
 #endif
-#define _invalidobjects_included
+#define _IO_included
 
 #if !defined _samp_included
 	#error "plz include a_samp.inc"
 #endif
 
-#if !defined PAWNCMD_INC_
+#if !defined PAWNRAKNET_INC_
 	#error "plz include Pawn.RakNet"
 #endif
 
@@ -41,6 +46,20 @@
 	#define RPC_CREATE_PICKUP 95
 #endif
 
+#if defined RPC_SHOW_DIALOG
+	#undef RPC_SHOW_DIALOG
+	#define RPC_SHOW_DIALOG 61
+#else
+	#define RPC_SHOW_DIALOG 61
+#endif
+
+#if defined RPC_DIALOG_RESPONSE
+	#undef RPC_DIALOG_RESPONSE
+	#define RPC_DIALOG_RESPONSE 62
+#else
+	#define RPC_DIALOG_RESPONSE 62
+#endif
+
 #define PICKUP_REPLACE_MODEL 1239
 
 enum E_CLIENT_KEY
@@ -55,7 +74,7 @@ static const stock m_szClientVersions[][E_CLIENT_KEY] = {
 	{47, "1031CA8429843C9B8C178B65F3C73602578440D17F8"}
 };
 
-// ohhhhhh so beautiful
+// oooohhhhhhh so beautiful
 static const m_szSampModels[] = { 
 	18631, 18632, 18633, 18634, 18635, 18636, 18637, 18638, 18639, 18640, 18641, 18642, 18643, 18644, 18645, 18646, 18647, 18648, 18649, 18650, 18651, 18715,
 	18652, 18653, 18654, 18655, 18656, 18657, 18658, 18659, 18660, 18661, 18662, 18663, 18664, 18665, 18666, 18667, 18668, 18669, 18670, 18671, 18672, 18716, 
@@ -125,6 +144,18 @@ static const m_szSampModels[] = {
 	11751, 11752, 11753, 19901, 19902 
 };
 
+#if defined IO_USE_DIALOG_PATCH || defined IO_USE_DIALOG_PATCH
+static bool:bPlayerDialogInvalid[MAX_PLAYERS];
+new g_szValidDialogStyles[][2] = {
+	{1, DIALOG_STYLE_MSGBOX}, // DIALOG_STYLE_MSGBOX
+	{1, DIALOG_STYLE_INPUT}, // DIALOG_STYLE_INPUT
+	{0, DIALOG_STYLE_INPUT}, // DIALOG_STYLE_LIST
+	{0, DIALOG_STYLE_INPUT}, // DIALOG_STYLE_PASSWORD
+	{0, DIALOG_STYLE_INPUT}, // DIALOG_STYLE_TABLIST
+	{0, DIALOG_STYLE_INPUT} // DIALOG_STYLE_TABLIST_HEADERS
+};
+#endif
+
 enum E_CLIENT_STRUCT
 {
 	iVersion, 					// INT32 
@@ -138,6 +169,32 @@ enum E_CLIENT_STRUCT
 	ClientVersion[12]			// char  
 
 };
+
+#if defined IO_USE_DIALOG_PATCH
+enum E_DIALOG_STRUCT
+{
+	e_wDialogID, 			// UINT16
+	e_bDialogStyle, 		// UINT8
+	e_bTitleLength, 		// UINT8
+	e_szTitle[64], 			// char
+	e_bButton1Len, 			// UINT8
+	e_szButton1[61],		// char
+	e_bButton2Len, 			// UINT8
+	e_szButton2[64], 		// char
+	e_szInfo[4096]
+};
+#endif
+
+#if defined IO_USE_DIALOG_RESPONSE_PATCH
+enum E_DIALOG_RESPONSE_STRUCT
+{
+	e_wDialogID,  	// PR_UINT16 
+	e_bResponse, 	// PR_UINT8  
+	e_wListItem, 	// PR_UINT16 
+	e_bTextLength, 	// PR_UINT8 
+	e_szText[0xFF] 	// PR_STRING
+};
+#endif
 
 enum E_PICKUP_STRUCT
 {
@@ -173,11 +230,9 @@ enum E_OBJECT_STRUCT
 
 };
 static dataObject[E_OBJECT_STRUCT];
-
 static playerDevice[MAX_PLAYERS char];
 
 stock isPlayerAndroid(playerId) { return playerDevice{playerId}; }
-
 stock setDeviceInfo(playerId, deviceType)
 {
 	playerDevice{playerId} = deviceType;
@@ -234,6 +289,35 @@ stock isInvalidObject(modelId)
 				}
 			}
 		}
+		#if defined IO_USE_DIALOG_RESPONSE_PATCH
+		else if(rpcid == RPC_DIALOG_RESPONSE)
+		{
+			if(bPlayerDialogInvalid[playerid] && isPlayerAndroid(playerid))
+			{
+				bPlayerDialogInvalid[playerid] = false;
+				new dataResponse[E_DIALOG_RESPONSE_STRUCT];
+				BS_ReadValue(
+					bs,
+					PR_UINT16, dataResponse[e_wDialogID],
+					PR_UINT8, dataResponse[e_bResponse],
+					PR_UINT16, dataResponse[e_wListItem],
+					PR_UINT8, dataResponse[e_bTextLength], 
+					PR_STRING, dataResponse[e_szText], dataResponse[e_bTextLength]
+				);
+				BS_Reset(bs);
+				BS_WriteValue(
+			        bs,
+			        PR_UINT16, dataResponse[e_wDialogID],
+					PR_UINT8, dataResponse[e_bResponse],
+					PR_UINT16, strval(dataResponse[e_szText]),
+					PR_UINT8, dataResponse[e_bTextLength], 
+					PR_STRING, dataResponse[e_szText]
+			    );
+			    BS_ResetReadPointer(bs);
+				BS_ResetWritePointer(bs);
+			}
+		}
+		#endif
 		#if defined INCLUDE_OnIncomingRPC
 			return INCLUDE_OnIncomingRPC(playerid, rpcid, BitStream:bs);
 		#else
@@ -319,9 +403,10 @@ stock isInvalidObject(modelId)
 					_frmtsrt[0] = '\0';
 					format(_frmtsrt, sizeof(_frmtsrt), "[Warning] Bad pickup model: %d(%d)", dataPickup[dModelID], dataPickup[dPickupID]);
 					SendClientMessage(playerid, 0xa9c4e4FF, _frmtsrt);
-					new BitStream:bitstream = BS_New(); 
+					BS_Reset(bs);
+
 					BS_WriteValue( 
-					    bitstream, 
+					    bs, 
 					    PR_UINT32, dataPickup[dPickupID], 	//id 
 					    PR_UINT32, PICKUP_REPLACE_MODEL,	//model
 					    PR_UINT32, dataPickup[dSpawnType],  //type. 
@@ -329,12 +414,56 @@ stock isInvalidObject(modelId)
 					    PR_FLOAT, dataPickup[pickupY], 		//y. 
 					    PR_FLOAT, dataPickup[pickupZ] 		//z. 
 					); 
-					BS_RPC(bitstream, playerid, RPC_CREATE_PICKUP, PR_HIGH_PRIORITY, PR_RELIABLE_SEQUENCED);
-					BS_Delete(bitstream);  
-					return 0;
 				}
+				BS_ResetReadPointer(bs);
+				BS_ResetWritePointer(bs);
 			}	
 		}
+		#if defined IO_USE_DIALOG_PATCH
+		else if(rpcid == RPC_SHOW_DIALOG)
+		{
+			static dataDialog[E_DIALOG_STRUCT];
+			BS_ReadValue(
+		        bs,
+		        PR_UINT16,  dataDialog[e_wDialogID],
+				PR_UINT8, dataDialog[e_bDialogStyle],
+				PR_UINT8, dataDialog[e_bTitleLength],
+				PR_STRING, dataDialog[e_szTitle], dataDialog[e_bTitleLength],
+				PR_UINT8, dataDialog[e_bButton1Len],
+				PR_STRING, dataDialog[e_szButton1], dataDialog[e_bButton1Len],
+				PR_UINT8, dataDialog[e_bButton2Len],
+				PR_STRING, dataDialog[e_szButton2], dataDialog[e_bButton2Len],
+				PR_CSTRING, dataDialog[e_szInfo], sizeof(dataDialog[e_szInfo])
+		    );
+			if(isPlayerAndroid(playerid))
+			{
+				if(g_szValidDialogStyles[dataDialog[e_bDialogStyle]][0] == 0)
+				{
+					BS_Reset(bs);
+
+					if(g_szValidDialogStyles[dataDialog[e_bDialogStyle]][1] == DIALOG_STYLE_INPUT && (dataDialog[e_bDialogStyle] != DIALOG_STYLE_INPUT || dataDialog[e_bDialogStyle] != DIALOG_STYLE_PASSWORD))
+						bPlayerDialogInvalid[playerid] = true;
+
+					BS_WriteValue(
+				        bs,
+				        PR_UINT16, dataDialog[e_wDialogID],
+						PR_UINT8, g_szValidDialogStyles[dataDialog[e_bDialogStyle]][1],
+						PR_UINT8, dataDialog[e_bTitleLength],
+						PR_STRING, dataDialog[e_szTitle],
+						PR_UINT8, dataDialog[e_bButton1Len],
+						PR_STRING, dataDialog[e_szButton1], 
+						PR_UINT8, dataDialog[e_bButton2Len],
+						PR_STRING, dataDialog[e_szButton2], 
+						PR_CSTRING, dataDialog[e_szInfo]
+				    );
+				    BS_ResetReadPointer(bs);
+					BS_ResetWritePointer(bs);
+					return 1;
+				}
+			}
+			bPlayerDialogInvalid[playerid] = false;
+		}
+		#endif
 		#if defined INCLUDE_OnOutcomingRPC
 			return INCLUDE_OnOutcomingRPC(playerid, rpcid, BitStream:bs);
 		#else
