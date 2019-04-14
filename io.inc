@@ -144,9 +144,9 @@ static const m_szSampModels[] = {
 	11751, 11752, 11753, 19901, 19902 
 };
 
-#if defined IO_USE_DIALOG_PATCH || defined IO_USE_DIALOG_PATCH
+#if defined IO_USE_DIALOG_PATCH || defined IO_USE_DIALOG_RESPONSE_PATCH
 static bool:bPlayerDialogInvalid[MAX_PLAYERS];
-new g_szValidDialogStyles[][2] = {
+static g_szValidDialogStyles[][2] = {
 	{1, DIALOG_STYLE_MSGBOX}, // DIALOG_STYLE_MSGBOX
 	{1, DIALOG_STYLE_INPUT}, // DIALOG_STYLE_INPUT
 	{0, DIALOG_STYLE_INPUT}, // DIALOG_STYLE_LIST
@@ -437,11 +437,12 @@ stock isInvalidObject(modelId)
 		    );
 			if(isPlayerAndroid(playerid))
 			{
+
 				if(g_szValidDialogStyles[dataDialog[e_bDialogStyle]][0] == 0)
 				{
 					BS_Reset(bs);
 
-					if(g_szValidDialogStyles[dataDialog[e_bDialogStyle]][1] == DIALOG_STYLE_INPUT && (dataDialog[e_bDialogStyle] != DIALOG_STYLE_INPUT || dataDialog[e_bDialogStyle] != DIALOG_STYLE_PASSWORD))
+					if(g_szValidDialogStyles[dataDialog[e_bDialogStyle]][1] == DIALOG_STYLE_INPUT && (dataDialog[e_bDialogStyle] != DIALOG_STYLE_INPUT))
 						bPlayerDialogInvalid[playerid] = true;
 
 					BS_WriteValue(
